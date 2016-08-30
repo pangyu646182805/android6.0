@@ -11,8 +11,10 @@ import android.graphics.Rect;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.TypedValue;
+import android.view.MotionEvent;
 import android.view.View;
 
+import com.nineoldandroids.animation.ValueAnimator;
 import com.ppyy.weathertest.R;
 
 /**
@@ -22,7 +24,7 @@ import com.ppyy.weathertest.R;
 public class TestView extends View {
     public static final String DEFAULT_TEXT = "--";
     public static final String DEFAULT_TIME = "00/00";
-    public static final int MAX_TEMP = 40;
+    public static final int MAX_TEMP = 45;
     private int mDayPointColor = Color.parseColor("#FFCC00");
     private int mNightPointColor = Color.parseColor("#FE9C34");
     private int mDateTextColor = Color.parseColor("#8193A4");
@@ -89,7 +91,7 @@ public class TestView extends View {
     /**
      * 折线图的高度
      */
-    private int mChartHeight;
+    private float mChartHeight;
     /**
      * 中心点的温度
      */
@@ -108,6 +110,7 @@ public class TestView extends View {
     private Paint mTextPaint, mLinePaint;
 
     private Rect mTextRect, mTempTextRect, mDateTextRect;
+    private Bitmap mDayIcon, mNightIcon;
 
     public void setDayTemp(int dayTemp) {
         mDayTemp = dayTemp;
@@ -161,6 +164,11 @@ public class TestView extends View {
         mTextRect = new Rect();
         mDateTextRect = new Rect();
         mTempTextRect = new Rect();
+
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = 8;
+        mDayIcon = BitmapFactory.decodeResource(getResources(), R.mipmap.weather_sunny, options);
+        mNightIcon = BitmapFactory.decodeResource(getResources(), R.mipmap.weather_sunny, options);
     }
 
     @Override
@@ -185,55 +193,68 @@ public class TestView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        int y = 0;
+        float x = getMeasuredWidth() * 0.5f;
+        float y = 0;
+        // 画“周三”
         setSizeAndColor(mTextPaint, mTextSize, mTextColor);
-        mTextPaint.getTextBounds(mWeekText, 0, mWeekText.length(), mTextRect);
-        y = mTextRect.height() + getPaddingTop();
-        canvas.drawText(mWeekText, getMeasuredWidth() / 2, y, mTextPaint);
-
+        getTextBounds(mTextPaint, mWeekText, mTextRect);
+        y = drawText(canvas, mWeekText, x, mTextRect.height() + getPaddingTop(), mTextPaint);
+        // 画“08/23”
         setSizeAndColor(mTextPaint, mDateTextSize, mDateTextColor);
-        mTextPaint.getTextBounds(mDateText, 0, mDateText.length(), mDateTextRect);
-        y += mDateTextRect.height() + mLineSpace;
-        canvas.drawText(mDateText, getMeasuredWidth() / 2, y, mTextPaint);
+        getTextBounds(mTextPaint, mDateText, mDateTextRect);
+        y = drawText(canvas, mDateText, x, y + mDateTextRect.height() + mLineSpace, mTextPaint);
 
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inSampleSize = 8;
-        Bitmap icon = BitmapFactory.decodeResource(getResources(), R.mipmap.weather_sunny, options);
-        y += mLineSpace;
-        canvas.drawBitmap(icon, getMeasuredWidth() / 2 - icon.getWidth() / 2, y, null);
+        // 画天气图标
+        y = drawIcon(canvas, mDayIcon, x - mDayIcon.getWidth() * 0.5f, y + mLineSpace);
 
+        // 画白天天气描述
         setSizeAndColor(mTextPaint, mTextSize, mTextColor);
-        y += mLineSpace + icon.getHeight() + mTextRect.height();
-        canvas.drawText(mDayWeatherText, getMeasuredWidth() / 2, y, mTextPaint);
+        float partOneY = drawText(canvas, mDayWeatherText, x, y + mLineSpace + mDayIcon.getHeight() + mTextRect.height(), mTextPaint);
 
-        canvas.drawText(mNightWeatherText, getMeasuredWidth() / 2, getMeasuredHeight() - mLineSpace, mTextPaint);
-        icon = BitmapFactory.decodeResource(getResources(), R.mipmap.weather_sunny, options);
-        canvas.drawBitmap(icon, getMeasuredWidth() / 2 - icon.getWidth() / 2, getMeasuredHeight() - mLineSpace - icon.getHeight() - mTextRect.height(), null);
+        // 从下开始画晚上天气描述
+        y = drawText(canvas, mNightWeatherText, x, getMeasuredHeight() - getPaddingBottom(), mTextPaint);
+        y = drawIcon(canvas, mNightIcon, x - mNightIcon.getWidth() * 0.5f, y - mTextRect.height() - mLineSpace - mNightIcon.getHeight());
 
+        // 画折线图
+        drawChart(canvas, y, partOneY);
+    }
+
+    /**
+     * 画文本
+     */
+    private float drawText(Canvas canvas, String text, float x, float y, Paint paint) {
+        canvas.drawText(text, x, y, paint);
+        return y;
+    }
+
+    private float drawIcon(Canvas canvas, Bitmap icon, float left, float top) {
+        canvas.drawBitmap(icon, left, top, null);
+        return top;
+    }
+
+    private void drawChart(Canvas canvas, float y, float partOneY) {
         mLinePaint.setColor(mDayPointColor);
         mLinePaint.setStrokeWidth(mStrokeWidth);
-        int partThreeY = getMeasuredHeight() - mLineSpace - icon.getHeight() - mTextRect.height();
-        // canvas.drawLine(0, partThreeY, getMeasuredWidth(), partThreeY, mLinePaint);
-        // canvas.drawLine(0, y, getMeasuredWidth(), y, mLinePaint);
-        // 中心点y坐标
-        int center = (partThreeY - y) / 2 + y;
-        mChartHeight = (center - y) * 2;
+        // 折线图中心点y坐标
+        float center = (y - partOneY) * 0.5f + partOneY;
+        mChartHeight = (center - partOneY) * 2;
         // 一摄氏度对应的高度
-        int degreeHeight = mChartHeight / 2 / (MAX_TEMP - mCenterTemp);
+        float degreeHeight = mChartHeight / 2 / (MAX_TEMP - mCenterTemp);
 
         // 画出白天气温文本
         setSizeAndColor(mTextPaint, mTempTextSize, mTempTextColor);
         mTextPaint.getTextBounds(getTemp(mDayTemp), 0, getTemp(mDayTemp).length(), mTempTextRect);
-        canvas.drawText(getTemp(mDayTemp), getMeasuredWidth() * 0.5f, center - (mDayTemp - mCenterTemp) * degreeHeight - mPointRadio - mLineSpace, mTextPaint);
+        drawText(canvas, getTemp(mDayTemp), getMeasuredWidth() * 0.5f, center - (mDayTemp - mCenterTemp) * degreeHeight - mPointRadio - mLineSpace, mTextPaint);
         // 画白天温度圆点
         canvas.drawCircle(getMeasuredWidth() * 0.5f, center - (mDayTemp - mCenterTemp) * degreeHeight, mPointRadio, mLinePaint);
 
         // 画出晚上气温文本
-        canvas.drawText(getTemp(mNightTemp), getMeasuredWidth() * 0.5f, center + (mCenterTemp - mNightTemp) * degreeHeight + mPointRadio + mTempTextRect.height() + mLineSpace, mTextPaint);
+        drawText(canvas, getTemp(mNightTemp), getMeasuredWidth() * 0.5f, center + (mCenterTemp - mNightTemp) * degreeHeight + mPointRadio + mTempTextRect.height() + mLineSpace, mTextPaint);
         // 画晚上温度圆点
         mLinePaint.setColor(mNightPointColor);
         canvas.drawCircle(getMeasuredWidth() * 0.5f, center + (mCenterTemp - mNightTemp) * degreeHeight, mPointRadio, mLinePaint);
 
+        // 画折线
         mNextDayTempY = calculateLeftPoint(mNextDayTemp, mDayTemp, center, degreeHeight);
         mNextNightTempY = calculateLeftPoint(mNextNightTemp, mNightTemp, center, degreeHeight);
         if (mNextDayTempY != -1 && mNextNightTempY != -1) {
@@ -251,8 +272,29 @@ public class TestView extends View {
         }
         if (mPreNightTempY != -1) {
             mLinePaint.setColor(mNightPointColor);
+            ValueAnimator anim = ValueAnimator.ofFloat(0f, 1.0f);
+            anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    setAlpha((float) animation.getAnimatedValue());
+                }
+            });
+            anim.setDuration(400);
+            anim.start();
             canvas.drawLine(0, mPreNightTempY, getMeasuredWidth() / 2, center + (mCenterTemp - mNightTemp) * degreeHeight, mLinePaint);
         }
+    }
+
+    private void getTextBounds(Paint paint, String text, Rect rect) {
+        paint.getTextBounds(text, 0, text.length(), rect);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mOnClickListener != null) {
+            mOnClickListener.onClick(mDateText);
+        }
+        return super.onTouchEvent(event);
     }
 
     /**
@@ -260,7 +302,7 @@ public class TestView extends View {
      *
      * @return
      */
-    private float calculateLeftPoint(int temp, int refeTemp, int center, int degreeHeight) {
+    private float calculateLeftPoint(int temp, int refeTemp, float center, float degreeHeight) {
         if (temp == -1)
             return -1;
         float centerDayTemp = 0;
@@ -306,6 +348,11 @@ public class TestView extends View {
     }
 
     private OnNextTempFinishedListener mOnNextTempFinishedListener;
+    private OnClickListener mOnClickListener;
+
+    public void setOnClickListener(OnClickListener onClickListener) {
+        mOnClickListener = onClickListener;
+    }
 
     public void setOnNextTempFinishedListener(OnNextTempFinishedListener onNextTempFinishedListener) {
         mOnNextTempFinishedListener = onNextTempFinishedListener;
@@ -313,5 +360,9 @@ public class TestView extends View {
 
     public interface OnNextTempFinishedListener {
         void onNextTempFinished(float nextDayTempY, float nextNightTempY);
+    }
+
+    public interface OnClickListener {
+        void onClick(String msg);
     }
 }

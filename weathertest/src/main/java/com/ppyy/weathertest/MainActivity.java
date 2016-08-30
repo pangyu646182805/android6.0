@@ -1,7 +1,7 @@
 package com.ppyy.weathertest;
 
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 
 import com.ppyy.weathertest.test.TestView;
 
@@ -20,6 +20,19 @@ public class MainActivity extends AppCompatActivity {
         final TestView tv7 = (TestView) findViewById(R.id.tv7);
         final TestView tv8 = (TestView) findViewById(R.id.tv8);
         final TestView tv9 = (TestView) findViewById(R.id.tv9);
+
+        tv1.setOnClickListener(new TestView.OnClickListener() {
+            @Override
+            public void onClick(String msg) {
+                System.out.println(msg);
+            }
+        });
+        tv2.setOnClickListener(new TestView.OnClickListener() {
+            @Override
+            public void onClick(String msg) {
+                System.out.println(msg);
+            }
+        });
 
         tv1.setDayTemp(36);
         tv1.setNightTemp(27);
